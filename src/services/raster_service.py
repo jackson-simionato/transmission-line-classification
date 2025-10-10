@@ -1,10 +1,15 @@
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
+import json
 
 import numpy as np
 import rasterio
 from rasterio.merge import merge
 from rasterio.windows import Window
+from rasterio.features import rasterize
+import geopandas as gpd
+
+from src.utils import get_class_mapping
 
 
 class RasterService:
@@ -256,3 +261,179 @@ class RasterService:
                     patch_idx += 1
 
         return patches_info
+
+    def save_patches_info(
+        self, patches_info: List[Dict], output_path: Union[str, Path]
+    ) -> None:
+        """
+        Save patches information to a JSON file.
+
+        Args:
+            patches_info: List of patch information dictionaries
+            output_path: Path to save the JSON file
+        """
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(output_path, "w") as f:
+            json.dump(patches_info, f, indent=2)
+
+    # Helper methods for rasterization
+    def _reproject_if_needed(
+        self, gdf: gpd.GeoDataFrame, target_crs
+    ) -> gpd.GeoDataFrame:
+        """
+        Reproject GeoDataFrame to target CRS if needed.
+
+        Args:
+            gdf: GeoDataFrame to reproject
+            target_crs: Target CRS
+
+        Returns:
+            Reprojected GeoDataFrame (or original if CRS matches)
+        """
+        if gdf.crs != target_crs:
+            return gdf.to_crs(target_crs)
+        return gdf
+
+    def _prepare_shapes_for_rasterization(
+        self, gdf: gpd.GeoDataFrame, label_column: str
+    ) -> List[Tuple]:
+        """
+        Prepare geometry-value pairs for rasterization.
+
+        Args:
+            gdf: GeoDataFrame with geometries and labels
+            label_column: Column name containing class labels
+
+        Returns:
+            List of (geometry, value) tuples for valid geometries
+        """
+        shapes = [
+            (geom, int(label))
+            for geom, label in zip(gdf.geometry, gdf[label_column])
+            if geom is not None and geom.is_valid
+        ]
+        return shapes
+
+    def _write_mask_to_file(
+        self,
+        mask: np.ndarray,
+        output_path: Path,
+        width: int,
+        height: int,
+        transform,
+        crs,
+        dtype: str,
+    ) -> None:
+        """
+        Write a mask array to a GeoTIFF file.
+
+        Args:
+            mask: Mask array to write
+            output_path: Path to output file
+            width: Raster width
+            height: Raster height
+            transform: Affine transform
+            crs: Coordinate reference system
+            dtype: Data type
+        """
+        with rasterio.open(
+            output_path,
+            "w",
+            driver="GTiff",
+            height=height,
+            width=width,
+            count=1,
+            dtype=dtype,
+            crs=crs,
+            transform=transform,
+            compress="lzw",
+            nodata=None,
+        ) as dst:
+            dst.write(mask, 1)
+
+    def rasterize_polygons(
+        self,
+        gdf: gpd.GeoDataFrame,
+        reference_raster_path: Union[str, Path],
+        output_dir: Union[str, Path],
+        tile_id_column: str = "tile_id",
+        label_column: str = "class",
+        background_value: int = 0,
+        dtype: str = "uint8",
+    ) -> Dict[str, str]:
+        """
+        Create raster masks from polygon geometries in a shapefile.
+
+        Creates one raster mask per unique tile_id, where each pixel value
+        corresponds to the class label of the polygon it intersects.
+
+        Args:
+            gdf: GeoDataFrame containing polygon geometries and attributes
+            reference_raster_path: Path to a reference raster to match CRS, resolution, and bounds
+            output_dir: Directory where raster masks will be saved
+            tile_id_column: Column name containing tile identifiers
+            label_column: Column name containing class labels
+            background_value: Pixel value for areas with no polygon (default: 0)
+            dtype: Data type for output raster (default: 'uint8')
+
+        Returns:
+            Dictionary mapping tile_id to output raster path
+        """
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Get reference raster metadata with proper transform
+        with rasterio.open(reference_raster_path) as ref:
+            ref_transform = ref.transform
+            ref_width = ref.width
+            ref_height = ref.height
+            ref_crs = ref.crs
+
+        print(f"📐 Reference raster: {ref_width}x{ref_height}, CRS: {ref_crs}")
+
+        # Reproject shapefile to match reference raster CRS if needed
+        gdf = self._reproject_if_needed(gdf, ref_crs)
+
+        # Get unique tile ID and labels
+        tile_id = gdf[tile_id_column].unique()[0]
+        unique_labels = sorted(gdf[label_column].unique())
+        print(f"🏷️  Class labels: {unique_labels}")
+
+        gdf["class_value"] = gdf[label_column].apply(get_class_mapping)
+
+        # Prepare shapes for rasterization
+        shapes = self._prepare_shapes_for_rasterization(gdf, "class_value")
+
+        if not shapes:
+            print(f"   ⚠️  No valid geometries found for tile {tile_id}, skipping...")
+            return None
+
+        # Rasterize the polygons
+        mask = rasterize(
+            shapes=shapes,
+            out_shape=(ref_height, ref_width),
+            transform=ref_transform,
+            fill=background_value,
+            dtype=dtype,
+            all_touched=True,
+        )
+
+        # Create output path and write mask
+        output_filename = f"mask_{tile_id}.tif"
+        output_path = output_dir / output_filename
+
+        self._write_mask_to_file(
+            mask=mask,
+            output_path=output_path,
+            width=ref_width,
+            height=ref_height,
+            transform=ref_transform,
+            crs=ref_crs,
+            dtype=dtype,
+        )
+
+        print(f"   ✅ Saved: {output_filename}")
+
+        return {tile_id: str(output_path)}

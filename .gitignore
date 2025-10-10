@@ -168,3 +168,6 @@ logs/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+*.aux.xml
+data/samples
