@@ -1,13 +1,13 @@
+import json
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
-import json
 
+import geopandas as gpd
 import numpy as np
 import rasterio
+from rasterio.features import rasterize
 from rasterio.merge import merge
 from rasterio.windows import Window
-from rasterio.features import rasterize
-import geopandas as gpd
 
 from src.utils import get_class_mapping
 

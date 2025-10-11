@@ -14,7 +14,7 @@ from src.services.raster_service import RasterService
 def main(
     input_shapefile: str,
     rasters_dir: str,
-    output_dir: str = "data/masks",
+    output_dir: str = "data/labels/mask",
     tile_id_column: str = "tile_id",
     label_column: str = "class",
     background_value: int = 0,
