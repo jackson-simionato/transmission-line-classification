@@ -143,6 +143,8 @@ class SAMSegmentationService:
         image: np.ndarray,
         auto_configure: bool = True,
         max_area: Optional[int] = None,
+        ignore_nodata: bool = True,
+        nodata_mask: Optional[np.ndarray] = None,
     ) -> List[Dict]:
         """
         Segment a single image using SAM
@@ -151,6 +153,8 @@ class SAMSegmentationService:
             image: RGB image as numpy array (H, W, 3)
             auto_configure: Auto-configure mask generator if not configured
             max_area: Maximum segment area in pixels (filters out huge segments)
+            ignore_nodata: Whether to mask nodata pixels before SAM processing
+            nodata_mask: Pre-computed nodata mask (if None, will be computed from image)
 
         Returns:
             List of segment dictionaries with masks and properties
@@ -173,8 +177,33 @@ class SAMSegmentationService:
 
         logger.debug(f"Segmenting image of shape {image.shape}")
 
-        # Generate masks
-        masks = self.mask_generator.generate(image)
+        # Handle nodata pixels if requested
+        if ignore_nodata:
+            # Use pre-computed mask if provided, otherwise compute from image
+            if nodata_mask is None:
+                # Create mask where ANY band is 0 (nodata)
+                nodata_mask = np.any(image == 0, axis=2)
+                nodata_pixels = nodata_mask.sum()
+                total_pixels = image.size // 3  # RGB image
+                logger.info(f"Nodata pixels detected: {nodata_pixels}/{total_pixels} ({nodata_pixels/total_pixels*100:.1f}%)")
+            else:
+                nodata_pixels = nodata_mask.sum()
+                total_pixels = image.size // 3  # RGB image
+                logger.info(f"Using pre-computed nodata mask: {nodata_pixels}/{total_pixels} ({nodata_pixels/total_pixels*100:.1f}%)")
+            
+            if nodata_pixels > 0:
+                # Mask out nodata pixels by setting them to a neutral value
+                # This prevents SAM from segmenting these areas
+                masked_image = image.copy()
+                masked_image[nodata_mask] = [128, 128, 128]  # Neutral gray
+                logger.info("Masked nodata pixels with neutral gray before SAM processing")
+            else:
+                masked_image = image
+        else:
+            masked_image = image
+
+        # Generate masks on the masked image
+        masks = self.mask_generator.generate(masked_image)
 
         logger.info(f"Generated {len(masks)} segments")
 
@@ -186,6 +215,9 @@ class SAMSegmentationService:
                 logger.info(
                     f"Filtered out {original_count - len(masks)} segments larger than {max_area} pixels"
                 )
+
+        # Note: Nodata filtering is now handled by masking the input image
+        # before SAM processing, so no post-processing filtering is needed
 
         return masks
 

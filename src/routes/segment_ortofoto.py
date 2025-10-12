@@ -112,7 +112,8 @@ class OrtofotoSegmentationPipeline:
         return all((tile_output_dir / file).exists() for file in required_files)
 
     def segment_tile(
-        self, tile_path: Path, save_outputs: bool = True, return_segments: bool = False
+        self, tile_path: Path, save_outputs: bool = True, return_segments: bool = False, 
+        ignore_nodata: bool = True
     ) -> tuple[Optional[List[Dict]], Dict]:
         """
         Segment a single ortofoto tile (memory optimized)
@@ -121,6 +122,7 @@ class OrtofotoSegmentationPipeline:
             tile_path: Path to GeoTIFF tile
             save_outputs: Whether to save visualization and metadata
             return_segments: Whether to return segments (uses more memory)
+            ignore_nodata: Whether to mask nodata pixels (any band = 0) before SAM processing
 
         Returns:
             (segments or None, metadata) tuple
@@ -162,6 +164,15 @@ class OrtofotoSegmentationPipeline:
 
         logger.info(f"  Image shape: {image.shape}, CRS: {metadata['crs']}")
 
+        # Detect nodata pixels BEFORE preprocessing (CLAHE can change 0 values)
+        nodata_mask = None
+        if ignore_nodata:
+            nodata_mask = np.any(image == 0, axis=2)
+            nodata_pixels = nodata_mask.sum()
+            total_pixels = image.size // 3  # RGB image
+            if nodata_pixels > 0:
+                logger.info(f"  Nodata pixels detected: {nodata_pixels}/{total_pixels} ({nodata_pixels/total_pixels*100:.1f}%)")
+
         # Apply preprocessing if enabled
         preprocessing_stats = None
         if self.enable_preprocessing and self.preprocessor is not None:
@@ -183,7 +194,12 @@ class OrtofotoSegmentationPipeline:
         # Segment with SAM
         logger.info("  Running SAM segmentation...")
         max_area = getattr(self, "max_area", None)
-        segments = self.sam_service.segment_image(image, max_area=max_area)
+        segments = self.sam_service.segment_image(
+            image, 
+            max_area=max_area, 
+            ignore_nodata=ignore_nodata,
+            nodata_mask=nodata_mask
+        )
         logger.info(f"  Generated {len(segments)} segments")
 
         # Free image memory immediately after segmentation
@@ -251,6 +267,7 @@ class OrtofotoSegmentationPipeline:
         pattern: str = "*.tif",
         create_summary: bool = True,
         batch_size: int = 1,
+        ignore_nodata: bool = True,
     ) -> Dict:
         """
         Process all tiles in a directory (memory optimized)
@@ -260,6 +277,7 @@ class OrtofotoSegmentationPipeline:
             pattern: File pattern to match
             create_summary: Create summary statistics
             batch_size: Number of tiles to process before clearing memory (1=safest)
+            ignore_nodata: Whether to mask nodata pixels (any band = 0) before SAM processing
 
         Returns:
             Summary statistics dictionary
@@ -294,6 +312,7 @@ class OrtofotoSegmentationPipeline:
                     tile_path,
                     save_outputs=True,
                     return_segments=False,  # Don't return segments to save memory
+                    ignore_nodata=ignore_nodata,
                 )
 
                 # Check if tile was skipped
@@ -602,6 +621,18 @@ if __name__ == "__main__":
         action="store_true",
         help="Force recreation of existing segmentation results (default: skip existing)",
     )
+    parser.add_argument(
+        "--ignore-nodata",
+        action="store_true",
+        default=True,
+        help="Skip segmentation on nodata pixels (any band = 0) (default: True)",
+    )
+    parser.add_argument(
+        "--no-ignore-nodata",
+        dest="ignore_nodata",
+        action="store_false",
+        help="Disable nodata filtering (segment all pixels)",
+    )
 
     args = parser.parse_args()
 
@@ -644,7 +675,9 @@ if __name__ == "__main__":
         force=args.force,
     )
     summary = pipeline.process_directory(
-        Path(args.input_dir), batch_size=args.batch_size
+        Path(args.input_dir), 
+        batch_size=args.batch_size,
+        ignore_nodata=args.ignore_nodata,
     )
 
     logger.info("Done!")
