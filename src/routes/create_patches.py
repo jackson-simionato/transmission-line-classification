@@ -115,7 +115,7 @@ Examples:
   python -m src.routes.create_patches --input-dir data/raw --output-dir data/patches
 
   # Custom patch size and overlap
-  python -m src.routes.create_patches --patch-size 256 --overlap 0.5
+  python -m src.routes.create_patches --patch-size 256 --overlap-percent 0.5
 
   # Process specific pattern
   python -m src.routes.create_patches --pattern "OXAPAMPA*.tif"
@@ -144,10 +144,10 @@ Examples:
     )
 
     parser.add_argument(
-        "--overlap",
+        "--overlap-percent",
         type=float,
         default=0.25,
-        help="Overlap percentage between patches, 0.0-1.0 (default: 0.25 = 25%%)",
+        help="Overlap percentage between patches, 0.0-1.0 (default: 0.25 = 25%)",
     )
 
     parser.add_argument(
@@ -170,7 +170,7 @@ Examples:
         input_dir=args.input_dir,
         output_dir=args.output_dir,
         patch_size=args.patch_size,
-        overlap_percent=args.overlap,
+        overlap_percent=args.overlap_percent,
         pattern=args.pattern,
         prefix=args.prefix,
     )
