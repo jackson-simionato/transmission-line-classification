@@ -6,7 +6,7 @@ Specific logic for transmission line classification project
 import json
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -93,26 +93,22 @@ class OrtofotoSegmentationPipeline:
     def _tile_exists(self, tile_name: str) -> bool:
         """
         Check if segmentation results already exist for a tile
-        
+
         Args:
             tile_name: Name of the tile (without extension)
-            
+
         Returns:
             True if segmentation results exist, False otherwise
         """
         tile_output_dir = self.output_base_dir / tile_name
-        
+
         # Check if the tile directory exists and has the required files
         if not tile_output_dir.exists():
             return False
-        
+
         # Check for key output files
-        required_files = [
-            "segments.geojson",
-            "metadata.json",
-            "visualization.png"
-        ]
-        
+        required_files = ["segments.geojson", "metadata.json", "visualization.png"]
+
         return all((tile_output_dir / file).exists() for file in required_files)
 
     def segment_tile(
@@ -135,7 +131,7 @@ class OrtofotoSegmentationPipeline:
             raise FileNotFoundError(f"Tile not found: {tile_path}")
 
         tile_name = tile_path.stem
-        
+
         # Check if tile already exists and skip if not forced
         if not self.force and self._tile_exists(tile_name):
             logger.info(f"Skipping existing tile: {tile_path.name}")
@@ -143,7 +139,7 @@ class OrtofotoSegmentationPipeline:
             return None, {
                 "tile_name": tile_name,
                 "skipped": True,
-                "reason": "already_exists"
+                "reason": "already_exists",
             }
 
         logger.info(f"Processing tile: {tile_path.name}")

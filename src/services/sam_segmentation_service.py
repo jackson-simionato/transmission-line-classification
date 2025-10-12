@@ -2,14 +2,15 @@
 Generic SAM (Segment Anything Model) Segmentation Service
 """
 
+import logging
+from pathlib import Path
+from typing import Dict, List, Optional
+
 import numpy as np
 import torch
-from pathlib import Path
-from typing import List, Dict, Optional
-import logging
 
 try:
-    from segment_anything import sam_model_registry, SamAutomaticMaskGenerator
+    from segment_anything import SamAutomaticMaskGenerator, sam_model_registry
 
     SAM_AVAILABLE = True
 except ImportError:
