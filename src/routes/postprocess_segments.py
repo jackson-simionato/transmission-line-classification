@@ -40,7 +40,7 @@ class SegmentPostprocessingPipeline:
         self,
         output_dir: Path,
         original_images_dir: Optional[Path] = None,
-        config: Optional[Dict] = None,
+        config: Optional[Dict] = None
     ):
         """
         Initialize post-processing pipeline
@@ -240,68 +240,80 @@ class SegmentPostprocessingPipeline:
                     )
                     break  # Only take first polygon per segment
 
-        # Create GeoDataFrame
-        gdf = gpd.GeoDataFrame(polygons, crs=metadata.get("crs", "EPSG:4326"))
+        # Create GeoDataFrame with proper CRS
+        crs = metadata.get("crs", "EPSG:4326")
+        if hasattr(crs, 'to_string'):
+            crs = crs.to_string()
+        gdf = gpd.GeoDataFrame(polygons, crs=crs)
 
         # Close boundaries if requested
         if close_boundaries and len(gdf) > 0:
             logger.info("Closing tile boundaries using bbox difference")
 
-            # Create tile bbox from metadata bounds
-            if "bounds" in metadata:
-                bounds = metadata["bounds"]  # [minx, miny, maxx, maxy]
-                tile_bbox = box(bounds[0], bounds[1], bounds[2], bounds[3])
-            else:
-                # Fallback: use bounds of existing geometries
-                tile_bbox = gdf.total_bounds
-                tile_bbox = box(tile_bbox[0], tile_bbox[1], tile_bbox[2], tile_bbox[3])
-
-            # Union all existing geometries
-            existing_union = gdf.geometry.unary_union
-
-            # Find difference (gaps)
-            gaps = tile_bbox.difference(existing_union)
-
-            if not gaps.is_empty:
-                # Convert gaps to individual polygons
-                if gaps.geom_type == "Polygon":
-                    gap_polygons = [gaps]
-                elif gaps.geom_type == "MultiPolygon":
-                    gap_polygons = list(gaps.geoms)
+            try:
+                # Create tile bbox from metadata bounds
+                if "bounds" in metadata:
+                    bounds = metadata["bounds"]  # [minx, miny, maxx, maxy]
+                    tile_bbox = box(bounds[0], bounds[1], bounds[2], bounds[3])
                 else:
-                    gap_polygons = []
+                    # Fallback: use bounds of existing geometries
+                    total_bounds = gdf.total_bounds
+                    tile_bbox = box(total_bounds[0], total_bounds[1], total_bounds[2], total_bounds[3])
 
-                # Add gap polygons to GeoDataFrame
-                if gap_polygons:
-                    gap_data = []
-                    segment_id_offset = (
-                        max(gdf["segment_id"]) + 1 if len(gdf) > 0 else 0
-                    )
+                # Union all existing geometries
+                existing_union = gdf.geometry.unary_union
 
-                    for i, gap_geom in enumerate(gap_polygons):
-                        gap_data.append(
-                            {
-                                "geometry": gap_geom,
-                                "segment_id": segment_id_offset + i,
-                                "area_pixels": int(
-                                    gap_geom.area / (transform.a * abs(transform.e))
-                                ),  # Approximate pixel area
-                                "predicted_iou": 0.5,
-                                "stability_score": 0.5,
-                                "is_gap_fill": False,
-                                "is_superpixel_fill": False,
-                                "is_border_fill": True,
-                                "suggested_class": "grassland",
-                            }
+                # Find difference (gaps)
+                gaps = tile_bbox.difference(existing_union)
+
+                if not gaps.is_empty and gaps.area > 0:
+                    # Convert gaps to individual polygons
+                    if gaps.geom_type == "Polygon":
+                        gap_polygons = [gaps]
+                    elif gaps.geom_type == "MultiPolygon":
+                        gap_polygons = list(gaps.geoms)
+                    else:
+                        gap_polygons = []
+
+                    # Add gap polygons to GeoDataFrame
+                    if gap_polygons:
+                        gap_data = []
+                        segment_id_offset = (
+                            max(gdf["segment_id"]) + 1 if len(gdf) > 0 else 0
                         )
 
-                    # Concatenate gap polygons
-                    gap_gdf = gpd.GeoDataFrame(gap_data, crs=gdf.crs)
-                    gdf = pd.concat([gdf, gap_gdf], ignore_index=True)
+                        for i, gap_geom in enumerate(gap_polygons):
+                            # Calculate pixel area more accurately
+                            pixel_area = int(gap_geom.area / (abs(transform.a) * abs(transform.e)))
+                            
+                            gap_data.append(
+                                {
+                                    "geometry": gap_geom,
+                                    "segment_id": segment_id_offset + i,
+                                    "area_pixels": pixel_area,
+                                    "predicted_iou": 0.5,
+                                    "stability_score": 0.5,
+                                    "is_gap_fill": False,
+                                    "is_superpixel_fill": False,
+                                    "is_border_fill": True,
+                                    "suggested_class": "grassland",
+                                }
+                            )
 
-                    logger.info(
-                        f"Added {len(gap_polygons)} gap polygons to close tile boundaries"
-                    )
+                        # Concatenate gap polygons
+                        gap_gdf = gpd.GeoDataFrame(gap_data, crs=gdf.crs)
+                        gdf = pd.concat([gdf, gap_gdf], ignore_index=True)
+
+                        logger.info(
+                            f"Added {len(gap_polygons)} gap polygons to close tile boundaries"
+                        )
+                    else:
+                        logger.info("No gap polygons to add")
+                else:
+                    logger.info("No gaps found in tile boundaries")
+            except Exception as e:
+                logger.warning(f"Error in boundary closing: {e}")
+                logger.info("Continuing without boundary closing")
 
         # Save to file
         gdf.to_file(output_path, driver="GeoJSON")
@@ -620,7 +632,7 @@ if __name__ == "__main__":
         original_images_dir=Path(args.original_images_dir)
         if args.original_images_dir
         else None,
-        config=config,
+        config=config
     )
 
     # Process directory
