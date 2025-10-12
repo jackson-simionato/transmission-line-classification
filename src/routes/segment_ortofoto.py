@@ -3,26 +3,27 @@ Route for segmenting orthophoto tiles using SAM
 Specific logic for transmission line classification project
 """
 
-import numpy as np
-import rasterio
-from pathlib import Path
-from typing import Optional, Dict, List
 import json
 import logging
-from tqdm import tqdm
+from pathlib import Path
+from typing import Dict, List, Optional
+
 import cv2
+import numpy as np
+import rasterio
+from tqdm import tqdm
 
 try:
     import geopandas as gpd
-    from shapely.geometry import shape
     from rasterio.features import shapes as rasterio_shapes
+    from shapely.geometry import shape
 
     GEOPANDAS_AVAILABLE = True
 except ImportError:
     GEOPANDAS_AVAILABLE = False
 
-from src.services.sam_segmentation_service import SAMSegmentationService
 from src.services.preprocessing_service import ImagePreProcessingService
+from src.services.sam_segmentation_service import SAMSegmentationService
 
 # Configure logging
 logging.basicConfig(
@@ -43,6 +44,7 @@ class OrtofotoSegmentationPipeline:
         output_base_dir: str = "data/sam_segments",
         enable_preprocessing: bool = True,
         max_area: Optional[int] = None,
+        force: bool = False,
     ):
         """
         Initialize segmentation pipeline
@@ -52,11 +54,13 @@ class OrtofotoSegmentationPipeline:
             output_base_dir: Base directory for outputs
             enable_preprocessing: Whether to apply image preprocessing
             max_area: Maximum segment area in pixels (filters huge segments)
+            force: Whether to recreate existing segmentation results
         """
         self.sam_service = sam_service
         self.output_base_dir = Path(output_base_dir)
         self.output_base_dir.mkdir(parents=True, exist_ok=True)
         self.max_area = max_area
+        self.force = force
 
         # Initialize preprocessing service
         self.enable_preprocessing = enable_preprocessing
@@ -81,6 +85,35 @@ class OrtofotoSegmentationPipeline:
 
         logger.info("Ortofoto segmentation pipeline initialized")
         logger.info(f"Output directory: {self.output_base_dir}")
+        if self.force:
+            logger.info("Force mode enabled - will recreate existing segmentations")
+        else:
+            logger.info("Skip mode enabled - will skip existing segmentations")
+
+    def _tile_exists(self, tile_name: str) -> bool:
+        """
+        Check if segmentation results already exist for a tile
+        
+        Args:
+            tile_name: Name of the tile (without extension)
+            
+        Returns:
+            True if segmentation results exist, False otherwise
+        """
+        tile_output_dir = self.output_base_dir / tile_name
+        
+        # Check if the tile directory exists and has the required files
+        if not tile_output_dir.exists():
+            return False
+        
+        # Check for key output files
+        required_files = [
+            "segments.geojson",
+            "metadata.json",
+            "visualization.png"
+        ]
+        
+        return all((tile_output_dir / file).exists() for file in required_files)
 
     def segment_tile(
         self, tile_path: Path, save_outputs: bool = True, return_segments: bool = False
@@ -100,6 +133,18 @@ class OrtofotoSegmentationPipeline:
 
         if not tile_path.exists():
             raise FileNotFoundError(f"Tile not found: {tile_path}")
+
+        tile_name = tile_path.stem
+        
+        # Check if tile already exists and skip if not forced
+        if not self.force and self._tile_exists(tile_name):
+            logger.info(f"Skipping existing tile: {tile_path.name}")
+            # Return dummy metadata for consistency
+            return None, {
+                "tile_name": tile_name,
+                "skipped": True,
+                "reason": "already_exists"
+            }
 
         logger.info(f"Processing tile: {tile_path.name}")
 
@@ -244,6 +289,7 @@ class OrtofotoSegmentationPipeline:
         # Process each tile WITHOUT storing all segments in memory
         tile_stats = []
         processed_count = 0
+        skipped_count = 0
 
         for idx, tile_path in enumerate(tqdm(tile_files, desc="Processing tiles"), 1):
             try:
@@ -253,6 +299,11 @@ class OrtofotoSegmentationPipeline:
                     save_outputs=True,
                     return_segments=False,  # Don't return segments to save memory
                 )
+
+                # Check if tile was skipped
+                if metadata.get("skipped", False):
+                    skipped_count += 1
+                    continue
 
                 # Extract stats from metadata
                 stats = metadata.get("stats", {})
@@ -275,6 +326,7 @@ class OrtofotoSegmentationPipeline:
         # Create summary
         summary = {
             "total_tiles_processed": processed_count,
+            "total_tiles_skipped": skipped_count,
             "total_tiles_found": len(tile_files),
             "total_segments": sum(s["num_segments"] for s in tile_stats),
             "tiles": tile_stats,
@@ -312,6 +364,8 @@ class OrtofotoSegmentationPipeline:
         logger.info(
             f"Processed: {summary['total_tiles_processed']}/{summary['total_tiles_found']} tiles"
         )
+        if skipped_count > 0:
+            logger.info(f"Skipped: {skipped_count} tiles (already exist)")
         logger.info(f"Total segments: {summary['total_segments']}")
         if "global_stats" in summary:
             logger.info(
@@ -547,6 +601,11 @@ if __name__ == "__main__":
         default=2.0,
         help="CLAHE contrast enhancement strength (1.0-4.0, higher=more contrast)",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Force recreation of existing segmentation results (default: skip existing)",
+    )
 
     args = parser.parse_args()
 
@@ -586,6 +645,7 @@ if __name__ == "__main__":
         args.output_dir,
         enable_preprocessing=not args.no_preprocessing,
         max_area=args.max_area,
+        force=args.force,
     )
     summary = pipeline.process_directory(
         Path(args.input_dir), batch_size=args.batch_size
