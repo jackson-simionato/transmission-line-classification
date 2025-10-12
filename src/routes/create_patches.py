@@ -10,9 +10,9 @@ from src.services.raster_service import RasterService
 
 
 def main(
-    input_dir: str = "data/raw",
-    output_dir: str = "data/patches",
-    patch_size: int = 512,
+    input_dir: str = "data/ortofoto/raw",
+    output_dir: str = "data/ortofoto/patches",
+    patch_size: int = 256,
     overlap_percent: float = 0.25,
     pattern: str = "*.tif",
     prefix: str = "patch",
