@@ -3,11 +3,11 @@ Segment Post-Processing Service for SAM Segmentation Results
 Fills gaps, smooths boundaries, and merges small segments for complete coverage
 """
 
-import numpy as np
-import cv2
-from pathlib import Path
-from typing import List, Dict, Optional
 import logging
+from typing import Dict, List, Optional
+
+import cv2
+import numpy as np
 from scipy import ndimage
 
 logger = logging.getLogger(__name__)
@@ -253,7 +253,7 @@ class SegmentPostprocessingService:
             List of segments with problematic large overlapping segments removed
         """
         total_pixels = self.height * self.width
-        logger.info(f"Checking for large overlapping segments")
+        logger.info("Checking for large overlapping segments")
         logger.info(
             f"  Criteria 1: Segments > {max_segment_area_ratio * 100}% of image ({int(total_pixels * max_segment_area_ratio)} pixels)"
         )
@@ -338,7 +338,7 @@ class SegmentPostprocessingService:
                     if aspect_ratio > 4 and seg_i["area"] < 50000:
                         logger.info(
                             f"  Segment {seg_i['segment_id']} has high aspect ratio ({aspect_ratio:.1f}) "
-                            + f"- likely a line/cable, PRESERVING despite overlaps"
+                            + "- likely a line/cable, PRESERVING despite overlaps"
                         )
                         continue
 
@@ -441,7 +441,6 @@ class SegmentPostprocessingService:
             return segments
 
         # Create segments for uncovered areas
-        from scipy import ndimage
 
         # Label connected components in uncovered areas
         labeled_gaps, num_gaps = ndimage.label(uncovered_mask)
