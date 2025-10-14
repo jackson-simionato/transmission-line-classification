@@ -32,6 +32,19 @@ class ApplicationConfig:
             "OXAPAMPA-VILLA_RICA_ortofoto_tile_2_16",
         ]
 
+        # Feature extraction configuration
+        self.FEATURE_EXTRACTION = {
+            "include_spectral": True,
+            "include_geometric": True,
+            "include_texture": True,
+            "include_cnn": False,  # Disabled by default (memory intensive)
+            "cnn_model": "mobilenet_v3_small",  # or "efficientnet_b0"
+            "glcm_distances": [1],
+            "glcm_angles": [0],  # degrees
+            "glcm_levels": 256,
+            "output_format": "csv",  # or "parquet"
+        }
+
 
 def get_config():
     return ApplicationConfig()
