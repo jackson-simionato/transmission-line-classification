@@ -714,22 +714,40 @@ if __name__ == "__main__":
         "--smooth-boundaries", action="store_true", help="Smooth segment boundaries"
     )
     parser.add_argument(
+        "--remove-overlaps",
+        action="store_true",
+        default=True,
+        help="Remove overlaps between gap-fills and originals (default: True)",
+    )
+    parser.add_argument(
         "--no-remove-overlaps",
         dest="remove_overlaps",
         action="store_false",
-        help="Disable overlap removal between gap-fills and originals (default: enabled)",
+        help="Disable overlap removal between gap-fills and originals",
+    )
+    parser.add_argument(
+        "--remove-large-overlapping",
+        action="store_true",
+        default=True,
+        help="Remove large segments that overlap many others (default: True)",
     )
     parser.add_argument(
         "--no-remove-large-overlapping",
         dest="remove_large_overlapping",
         action="store_false",
-        help="Disable removal of large segments that overlap many others (default: enabled)",
+        help="Disable removal of large segments that overlap many others",
+    )
+    parser.add_argument(
+        "--close-boundaries",
+        action="store_true",
+        default=True,
+        help="Close tile boundaries by filling gaps (default: True)",
     )
     parser.add_argument(
         "--no-close-boundaries",
         dest="close_boundaries",
         action="store_false",
-        help="Disable tile boundary closing (default: enabled)",
+        help="Disable tile boundary closing",
     )
     parser.add_argument(
         "--min-gap-size",
