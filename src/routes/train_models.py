@@ -216,19 +216,31 @@ def main():
             logger.info("Saving trained models...")
             import joblib
 
+            # Create subdirectories
+            trained_models_dir = output_dir / "trained_models"
+            preprocessing_dir = output_dir / "preprocessing"
+            evaluation_dir = output_dir / "evaluation"
+            grid_search_dir = output_dir / "grid_search"
+            
+            trained_models_dir.mkdir(exist_ok=True)
+            preprocessing_dir.mkdir(exist_ok=True)
+            evaluation_dir.mkdir(exist_ok=True)
+            grid_search_dir.mkdir(exist_ok=True)
+
+            # Save trained models
             for model_name, model in trained_models.items():
-                model_path = output_dir / f"{model_name}_model.joblib"
+                model_path = trained_models_dir / f"{model_name}_model.joblib"
                 joblib.dump(model, model_path)
                 logger.info(f"Saved {model_name} to {model_path}")
 
             # Save scaler
-            scaler_path = output_dir / "scaler.joblib"
+            scaler_path = preprocessing_dir / "scaler.joblib"
             joblib.dump(training_service.scaler, scaler_path)
             logger.info(f"Saved scaler to {scaler_path}")
             
             # Save feature selector if feature selection was used
             if hasattr(training_service, 'feature_selector') and training_service.feature_selector is not None:
-                feature_selector_path = output_dir / "feature_selector.joblib"
+                feature_selector_path = preprocessing_dir / "feature_selector.joblib"
                 joblib.dump(training_service.feature_selector, feature_selector_path)
                 logger.info(f"Saved feature selector to {feature_selector_path}")
 
@@ -236,20 +248,27 @@ def main():
         if args.save_results:
             logger.info("Saving evaluation results...")
 
+            # Create subdirectories if not already created
+            if not args.save_models:
+                evaluation_dir = output_dir / "evaluation"
+                grid_search_dir = output_dir / "grid_search"
+                evaluation_dir.mkdir(exist_ok=True)
+                grid_search_dir.mkdir(exist_ok=True)
+
             # Save evaluation results
-            results_path = output_dir / "evaluation_results.json"
+            results_path = evaluation_dir / "evaluation_results.json"
             with open(results_path, "w") as f:
                 json.dump(evaluation_results, f, indent=2, default=str)
             logger.info(f"Saved evaluation results to {results_path}")
 
             # Save preprocessing info
-            preprocessing_path = output_dir / "preprocessing_info.json"
+            preprocessing_path = evaluation_dir / "preprocessing_info.json"
             with open(preprocessing_path, "w") as f:
                 json.dump(preprocessing_info, f, indent=2, default=str)
             logger.info(f"Saved preprocessing info to {preprocessing_path}")
 
             # Save model comparison
-            comparison_path = output_dir / "model_comparison.csv"
+            comparison_path = evaluation_dir / "model_comparison.csv"
             comparison_df.to_csv(comparison_path, index=False)
             logger.info(f"Saved model comparison to {comparison_path}")
 
@@ -257,14 +276,14 @@ def main():
             if args.grid_search:
                 grid_results = training_service.get_grid_search_results()
                 if grid_results:
-                    grid_results_path = output_dir / "grid_search_results.json"
+                    grid_results_path = grid_search_dir / "grid_search_results.json"
                     with open(grid_results_path, "w") as f:
                         json.dump(grid_results, f, indent=2, default=str)
                     logger.info(f"Saved grid search results to {grid_results_path}")
 
                     best_params_df = training_service.get_best_parameters()
                     if not best_params_df.empty:
-                        best_params_path = output_dir / "best_parameters.csv"
+                        best_params_path = grid_search_dir / "best_parameters.csv"
                         best_params_df.to_csv(best_params_path, index=False)
                         logger.info(f"Saved best parameters to {best_params_path}")
 
