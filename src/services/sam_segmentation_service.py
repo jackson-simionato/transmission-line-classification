@@ -185,18 +185,24 @@ class SAMSegmentationService:
                 nodata_mask = np.any(image == 0, axis=2)
                 nodata_pixels = nodata_mask.sum()
                 total_pixels = image.size // 3  # RGB image
-                logger.info(f"Nodata pixels detected: {nodata_pixels}/{total_pixels} ({nodata_pixels/total_pixels*100:.1f}%)")
+                logger.info(
+                    f"Nodata pixels detected: {nodata_pixels}/{total_pixels} ({nodata_pixels / total_pixels * 100:.1f}%)"
+                )
             else:
                 nodata_pixels = nodata_mask.sum()
                 total_pixels = image.size // 3  # RGB image
-                logger.info(f"Using pre-computed nodata mask: {nodata_pixels}/{total_pixels} ({nodata_pixels/total_pixels*100:.1f}%)")
-            
+                logger.info(
+                    f"Using pre-computed nodata mask: {nodata_pixels}/{total_pixels} ({nodata_pixels / total_pixels * 100:.1f}%)"
+                )
+
             if nodata_pixels > 0:
                 # Mask out nodata pixels by setting them to a neutral value
                 # This prevents SAM from segmenting these areas
                 masked_image = image.copy()
                 masked_image[nodata_mask] = [128, 128, 128]  # Neutral gray
-                logger.info("Masked nodata pixels with neutral gray before SAM processing")
+                logger.info(
+                    "Masked nodata pixels with neutral gray before SAM processing"
+                )
             else:
                 masked_image = image
         else:

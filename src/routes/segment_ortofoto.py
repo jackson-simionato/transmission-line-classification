@@ -112,8 +112,11 @@ class OrtofotoSegmentationPipeline:
         return all((tile_output_dir / file).exists() for file in required_files)
 
     def segment_tile(
-        self, tile_path: Path, save_outputs: bool = True, return_segments: bool = False, 
-        ignore_nodata: bool = True
+        self,
+        tile_path: Path,
+        save_outputs: bool = True,
+        return_segments: bool = False,
+        ignore_nodata: bool = True,
     ) -> tuple[Optional[List[Dict]], Dict]:
         """
         Segment a single ortofoto tile (memory optimized)
@@ -171,7 +174,9 @@ class OrtofotoSegmentationPipeline:
             nodata_pixels = nodata_mask.sum()
             total_pixels = image.size // 3  # RGB image
             if nodata_pixels > 0:
-                logger.info(f"  Nodata pixels detected: {nodata_pixels}/{total_pixels} ({nodata_pixels/total_pixels*100:.1f}%)")
+                logger.info(
+                    f"  Nodata pixels detected: {nodata_pixels}/{total_pixels} ({nodata_pixels / total_pixels * 100:.1f}%)"
+                )
 
         # Apply preprocessing if enabled
         preprocessing_stats = None
@@ -195,10 +200,10 @@ class OrtofotoSegmentationPipeline:
         logger.info("  Running SAM segmentation...")
         max_area = getattr(self, "max_area", None)
         segments = self.sam_service.segment_image(
-            image, 
-            max_area=max_area, 
+            image,
+            max_area=max_area,
             ignore_nodata=ignore_nodata,
-            nodata_mask=nodata_mask
+            nodata_mask=nodata_mask,
         )
         logger.info(f"  Generated {len(segments)} segments")
 
@@ -675,7 +680,7 @@ if __name__ == "__main__":
         force=args.force,
     )
     summary = pipeline.process_directory(
-        Path(args.input_dir), 
+        Path(args.input_dir),
         batch_size=args.batch_size,
         ignore_nodata=args.ignore_nodata,
     )
