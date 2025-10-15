@@ -1,11 +1,11 @@
 class ApplicationConfig:
     def __init__(self):
         self.CLASSES = {
-            "line": 1,
-            "tower": 2,
-            "grassland": 3,
-            "tall_vegetation": 4,
-            "soil": 5,
+            "line": 0,
+            "tower": 1,
+            "grassland": 2,
+            "tall_vegetation": 3,
+            "soil": 4,
         }
         self.NUM_CLASSES = len(self.CLASSES)
         self.CLASS_NAMES = list(self.CLASSES.keys())
@@ -20,14 +20,11 @@ class ApplicationConfig:
             "OXAPAMPA-VILLA_RICA_ortofoto_tile_2_20",
             "OXAPAMPA-VILLA_RICA_ortofoto_tile_2_19",
             "OXAPAMPA-VILLA_RICA_ortofoto_tile_2_17",
-        ]
-
-        self.VAL_DATASET_IDS = [
-            "OXAPAMPA-VILLA_RICA_ortofoto_tile_1_15",
             "OXAPAMPA-VILLA_RICA_ortofoto_tile_2_21",
         ]
 
         self.TEST_DATASET_IDS = [
+            "OXAPAMPA-VILLA_RICA_ortofoto_tile_1_15",
             "OXAPAMPA-VILLA_RICA_ortofoto_tile_2_18",
             "OXAPAMPA-VILLA_RICA_ortofoto_tile_2_16",
         ]
@@ -43,6 +40,55 @@ class ApplicationConfig:
             "glcm_angles": [0],  # degrees
             "glcm_levels": 256,
             "output_format": "csv",  # or "parquet"
+        }
+
+        # ML Training configuration
+        self.ML_TRAINING = {
+            "default_models": ["random_forest", "xgboost", "svm"],
+            "random_forest": {
+                "n_estimators": 200,
+                "max_depth": 10,
+                "min_samples_split": 10,
+                "min_samples_leaf": 2,
+                "random_state": 42,
+            },
+            "xgboost": {
+                "n_estimators": 200,
+                "learning_rate": 0.2,
+                "max_depth": 6,
+                "colsample_bytree": 0.8,
+                "random_state": 42,
+            },
+            "svm": {"kernel": "rbf", "random_state": 42, "C": 10, "gamma": 0.01},
+            "preprocessing": {
+                "normalize_features": True,
+                "handle_class_imbalance": True,
+                "use_smote": False,  # Can be enabled for more aggressive oversampling
+                "cv_folds": 3,
+            },
+            "grid_search": {
+                "enable": True,
+                "cv_folds": 3,
+                "scoring": "f1_weighted",
+                "n_jobs": -1,
+                "random_forest": {
+                    "n_estimators": [50, 100, 200],
+                    "max_depth": [5, 10, 15, None],
+                    "min_samples_split": [2, 5, 10],
+                    "min_samples_leaf": [1, 2, 4],
+                },
+                "xgboost": {
+                    "n_estimators": [100, 200, 300],
+                    "learning_rate": [0.1, 0.2, 0.3],
+                    "max_depth": [4, 6, 8],
+                    "colsample_bytree": [0.8, 0.9, 1.0],
+                },
+                "svm": {
+                    "C": [0.1, 1, 10, 100],
+                    "gamma": ["scale", "auto", 0.001, 0.01, 0.1],
+                    "kernel": ["rbf", "poly"],
+                },
+            },
         }
 
 

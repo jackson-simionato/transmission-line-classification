@@ -527,7 +527,6 @@ class FeatureExtractionService:
             # Process all tiles
             tile_ids = (
                 config.TRAIN_DATASET_IDS
-                + config.VAL_DATASET_IDS
                 + config.TEST_DATASET_IDS
             )
 
