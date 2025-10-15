@@ -21,6 +21,7 @@ from sklearn.model_selection import GridSearchCV, StratifiedKFold, cross_val_sco
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 from sklearn.utils.class_weight import compute_class_weight
+from sklearn.feature_selection import SelectKBest, f_classif, mutual_info_classif, RFE
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,8 @@ class MLTrainingService:
         self.models = {}
         self.evaluation_results = {}
         self.grid_search_results = {}
+        self.feature_selector = None
+        self.selected_feature_names = None
 
         # Model configurations
         self.model_configs = {
@@ -70,6 +73,9 @@ class MLTrainingService:
         test_df: pd.DataFrame,
         target_column: str = "class_label",
         feature_columns: Optional[List[str]] = None,
+        enable_feature_selection: bool = False,
+        feature_selection_method: str = "mutual_info",
+        n_features_to_select: int = 50,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, Dict[str, Any]]:
         """
         Preprocess training and test data
@@ -121,14 +127,33 @@ class MLTrainingService:
         # Create sample weights for XGBoost
         sample_weights = np.array([class_weight_dict[label] for label in y_train])
 
-        preprocessing_info = {
-            "feature_columns": feature_columns,
-            "class_weights": class_weight_dict,
-            "sample_weights": sample_weights,
-            "unique_classes": unique_classes,
-            "train_shape": X_train_scaled.shape,
-            "test_shape": X_test_scaled.shape,
-        }
+        # Feature selection (if enabled)
+        if enable_feature_selection:
+            X_train_scaled, X_test_scaled, selected_features = self.select_features(
+                X_train_scaled, y_train, X_test_scaled,
+                feature_columns, feature_selection_method, n_features_to_select
+            )
+            preprocessing_info = {
+                "feature_columns": feature_columns,
+                "selected_features": selected_features,
+                "n_features_selected": len(selected_features),
+                "class_weights": class_weight_dict,
+                "sample_weights": sample_weights,
+                "unique_classes": unique_classes,
+                "train_shape": X_train_scaled.shape,
+                "test_shape": X_test_scaled.shape,
+            }
+        else:
+            preprocessing_info = {
+                "feature_columns": feature_columns,
+                "selected_features": feature_columns,
+                "n_features_selected": len(feature_columns),
+                "class_weights": class_weight_dict,
+                "sample_weights": sample_weights,
+                "unique_classes": unique_classes,
+                "train_shape": X_train_scaled.shape,
+                "test_shape": X_test_scaled.shape,
+            }
 
         logger.info(
             f"Preprocessing complete. Train shape: {X_train_scaled.shape}, Test shape: {X_test_scaled.shape}"
@@ -136,6 +161,55 @@ class MLTrainingService:
         logger.info(f"Class weights: {class_weight_dict}")
 
         return X_train_scaled, X_test_scaled, y_train, y_test, preprocessing_info
+
+    def select_features(
+        self,
+        X_train: np.ndarray,
+        y_train: np.ndarray,
+        X_test: np.ndarray,
+        feature_names: List[str],
+        method: str = "mutual_info",
+        n_features: int = 50,
+    ) -> Tuple[np.ndarray, np.ndarray, List[str]]:
+        """
+        Select top k features using various methods
+
+        Args:
+            X_train: Training features
+            y_train: Training labels
+            X_test: Test features
+            feature_names: List of feature names
+            method: Selection method ('mutual_info', 'f_score', 'rfe')
+            n_features: Number of features to select
+
+        Returns:
+            Tuple of (X_train_selected, X_test_selected, selected_feature_names)
+        """
+        logger.info(f"Selecting {n_features} features using {method} method...")
+
+        if method == "mutual_info":
+            selector = SelectKBest(mutual_info_classif, k=n_features)
+        elif method == "f_score":
+            selector = SelectKBest(f_classif, k=n_features)
+        elif method == "rfe":
+            rf = RandomForestClassifier(n_estimators=100, random_state=42)
+            selector = RFE(rf, n_features_to_select=n_features)
+        else:
+            raise ValueError(f"Unknown selection method: {method}")
+
+        X_train_selected = selector.fit_transform(X_train, y_train)
+        X_test_selected = selector.transform(X_test)
+
+        # Get selected feature names
+        selected_indices = selector.get_support(indices=True)
+        selected_names = [feature_names[i] for i in selected_indices]
+
+        self.feature_selector = selector
+        self.selected_feature_names = selected_names
+
+        logger.info(f"Selected features: {selected_names}")
+
+        return X_train_selected, X_test_selected, selected_names
 
     def train_models(
         self,
@@ -516,8 +590,18 @@ class MLTrainingService:
             logger.warning(f"No feature importance available for {model_name}")
             return pd.DataFrame()
 
+        # Ensure feature names match the importance array length
+        importance_array = results["feature_importance"]
+        if len(feature_names) != len(importance_array):
+            logger.warning(f"Feature names length ({len(feature_names)}) doesn't match importance array length ({len(importance_array)})")
+            # Use selected feature names if available, otherwise truncate
+            if hasattr(self, 'selected_feature_names') and self.selected_feature_names:
+                feature_names = self.selected_feature_names
+            else:
+                feature_names = feature_names[:len(importance_array)]
+
         importance_df = pd.DataFrame(
-            {"feature": feature_names, "importance": results["feature_importance"]}
+            {"feature": feature_names, "importance": importance_array}
         ).sort_values("importance", ascending=False)
 
         return importance_df

@@ -75,6 +75,27 @@ def main():
         help="Enable grid search hyperparameter optimization",
     )
 
+    parser.add_argument(
+        "--feature-selection",
+        action="store_true",
+        help="Enable feature selection to reduce dimensionality",
+    )
+
+    parser.add_argument(
+        "--feature-selection-method",
+        type=str,
+        choices=["mutual_info", "f_score", "rfe"],
+        default="mutual_info",
+        help="Feature selection method (default: mutual_info)",
+    )
+
+    parser.add_argument(
+        "--n-features",
+        type=int,
+        default=50,
+        help="Number of features to select (default: 50)",
+    )
+
     args = parser.parse_args()
 
     # Validate input files
@@ -125,7 +146,12 @@ def main():
         # Preprocess data
         logger.info("Preprocessing data...")
         X_train, X_test, y_train, y_test, preprocessing_info = (
-            training_service.preprocess_data(train_df, test_df, args.target_column)
+            training_service.preprocess_data(
+                train_df, test_df, args.target_column,
+                enable_feature_selection=args.feature_selection,
+                feature_selection_method=args.feature_selection_method,
+                n_features_to_select=args.n_features
+            )
         )
 
         # Train models
@@ -152,6 +178,11 @@ def main():
                 print("\nGrid Search - Best Parameters:")
                 print(grid_results_df.to_string(index=False, float_format="%.4f"))
 
+        # Feature selection info
+        if args.feature_selection:
+            print(f"\nFeature Selection: {args.feature_selection_method}")
+            print(f"Features selected: {preprocessing_info['n_features_selected']} / {len(preprocessing_info['feature_columns'])}")
+
         # Model comparison
         comparison_df = training_service.get_model_comparison()
         if not comparison_df.empty:
@@ -170,7 +201,8 @@ def main():
 
             # Feature importance
             if results.get("feature_importance"):
-                feature_names = preprocessing_info["feature_columns"]
+                # Use selected features if feature selection was enabled
+                feature_names = preprocessing_info.get("selected_features", preprocessing_info["feature_columns"])
                 importance_df = training_service.get_feature_importance(
                     model_name, feature_names
                 )
@@ -193,6 +225,12 @@ def main():
             scaler_path = output_dir / "scaler.joblib"
             joblib.dump(training_service.scaler, scaler_path)
             logger.info(f"Saved scaler to {scaler_path}")
+            
+            # Save feature selector if feature selection was used
+            if hasattr(training_service, 'feature_selector') and training_service.feature_selector is not None:
+                feature_selector_path = output_dir / "feature_selector.joblib"
+                joblib.dump(training_service.feature_selector, feature_selector_path)
+                logger.info(f"Saved feature selector to {feature_selector_path}")
 
         # Save results if requested
         if args.save_results:

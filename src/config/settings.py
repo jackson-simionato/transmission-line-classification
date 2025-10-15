@@ -53,9 +53,9 @@ class ApplicationConfig:
                 "random_state": 42,
             },
             "xgboost": {
-                "n_estimators": 200,
-                "learning_rate": 0.2,
-                "max_depth": 6,
+                "n_estimators": 100,
+                "learning_rate": 0.1,
+                "max_depth": 4,
                 "colsample_bytree": 0.8,
                 "random_state": 42,
             },
@@ -88,6 +88,12 @@ class ApplicationConfig:
                     "gamma": ["scale", "auto", 0.001, 0.01, 0.1],
                     "kernel": ["rbf", "poly"],
                 },
+            },
+            "feature_selection": {
+                "enable": False,
+                "method": "mutual_info",  # mutual_info, f_score, rfe
+                "n_features": 50,
+                "methods_available": ["mutual_info", "f_score", "rfe"],
             },
         }
 
