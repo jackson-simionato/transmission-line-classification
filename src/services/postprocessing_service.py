@@ -19,9 +19,7 @@ class SegmentPostprocessingService:
     Handles gap filling, boundary smoothing, and segment merging
     """
 
-    def __init__(
-        self, image_height: int, image_width: int
-    ):
+    def __init__(self, image_height: int, image_width: int):
         """
         Initialize post-processing service
 

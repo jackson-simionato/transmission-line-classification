@@ -12,6 +12,8 @@ import numpy as np
 import rasterio
 from tqdm import tqdm
 
+from src.utils import deterministic_id
+
 try:
     import geopandas as gpd
     import pandas as pd
@@ -43,7 +45,7 @@ class SegmentPostprocessingPipeline:
         output_dir: Path,
         original_images_dir: Optional[Path] = None,
         config: Optional[Dict] = None,
-        force: bool = False
+        force: bool = False,
     ):
         """
         Initialize post-processing pipeline
@@ -230,6 +232,7 @@ class SegmentPostprocessingPipeline:
                 if value == 1:
                     polygons.append(
                         {
+                            "id": deterministic_id(shape(geom)),
                             "geometry": shape(geom),
                             "segment_id": segment["segment_id"],
                             "area_pixels": segment["area"],
@@ -249,7 +252,7 @@ class SegmentPostprocessingPipeline:
 
         # Create GeoDataFrame with proper CRS
         crs = metadata.get("crs", "EPSG:4326")
-        if hasattr(crs, 'to_string'):
+        if hasattr(crs, "to_string"):
             crs = crs.to_string()
         gdf = gpd.GeoDataFrame(polygons, crs=crs)
 
@@ -265,7 +268,12 @@ class SegmentPostprocessingPipeline:
                 else:
                     # Fallback: use bounds of existing geometries
                     total_bounds = gdf.total_bounds
-                    tile_bbox = box(total_bounds[0], total_bounds[1], total_bounds[2], total_bounds[3])
+                    tile_bbox = box(
+                        total_bounds[0],
+                        total_bounds[1],
+                        total_bounds[2],
+                        total_bounds[3],
+                    )
 
                 # Union all existing geometries
                 existing_union = gdf.geometry.unary_union
@@ -293,8 +301,10 @@ class SegmentPostprocessingPipeline:
 
                         for i, gap_geom in enumerate(gap_polygons):
                             # Calculate pixel area more accurately
-                            pixel_area = int(gap_geom.area / (abs(transform.a) * abs(transform.e)))
-                            
+                            pixel_area = int(
+                                gap_geom.area / (abs(transform.a) * abs(transform.e))
+                            )
+
                             gap_data.append(
                                 {
                                     "geometry": gap_geom,
@@ -334,74 +344,80 @@ class SegmentPostprocessingPipeline:
         gdf.to_file(output_path, driver="GeoJSON")
         logger.info(f"Saved {len(gdf)} polygons to {output_path}")
 
-    def _clip_polygons_with_nodata(self, gdf: gpd.GeoDataFrame, nodata_mask: np.ndarray, transform: rasterio.Affine) -> gpd.GeoDataFrame:
+    def _clip_polygons_with_nodata(
+        self, gdf: gpd.GeoDataFrame, nodata_mask: np.ndarray, transform: rasterio.Affine
+    ) -> gpd.GeoDataFrame:
         """
         Clip polygons against nodata mask by removing parts that overlap with nodata areas
-        
+
         Args:
             gdf: GeoDataFrame with polygons to clip
             nodata_mask: Boolean mask where True indicates nodata pixels
             transform: Rasterio transform for coordinate conversion
-            
+
         Returns:
             GeoDataFrame with clipped polygons
         """
         try:
             # Convert nodata mask to polygon
             nodata_polygons = self._mask_to_polygons(nodata_mask, transform)
-            
+
             if not nodata_polygons:
                 logger.info("No nodata polygons found, returning original GeoDataFrame")
                 return gdf
-            
+
             # Create a single nodata geometry (union of all nodata polygons)
             nodata_union = gpd.GeoSeries(nodata_polygons).unary_union
-            
+
             if nodata_union.is_empty:
                 logger.info("Nodata union is empty, returning original GeoDataFrame")
                 return gdf
-            
+
             # Clip each polygon against nodata areas
             clipped_geometries = []
             clipped_data = []
-            
+
             for idx, row in gdf.iterrows():
                 geom = row.geometry
-                
+
                 # Check if polygon overlaps with nodata
                 if geom.intersects(nodata_union):
                     # Clip polygon to remove nodata areas
                     clipped_geom = geom.difference(nodata_union)
-                    
+
                     # Handle different geometry types
                     if clipped_geom.is_empty:
                         # Polygon completely in nodata, skip it
                         logger.debug(f"Removed polygon {idx} (completely in nodata)")
                         continue
-                    elif clipped_geom.geom_type == 'MultiPolygon':
+                    elif clipped_geom.geom_type == "MultiPolygon":
                         # Keep the largest part
                         largest_poly = max(clipped_geom.geoms, key=lambda p: p.area)
                         clipped_geometries.append(largest_poly)
-                        clipped_data.append(row.drop('geometry').to_dict())
+                        clipped_data.append(row.drop("geometry").to_dict())
                     else:
                         # Single polygon
                         clipped_geometries.append(clipped_geom)
-                        clipped_data.append(row.drop('geometry').to_dict())
+                        clipped_data.append(row.drop("geometry").to_dict())
                 else:
                     # No overlap with nodata, keep original
                     clipped_geometries.append(geom)
-                    clipped_data.append(row.drop('geometry').to_dict())
-            
+                    clipped_data.append(row.drop("geometry").to_dict())
+
             if not clipped_geometries:
-                logger.info("All polygons were in nodata areas, returning empty GeoDataFrame")
+                logger.info(
+                    "All polygons were in nodata areas, returning empty GeoDataFrame"
+                )
                 return gpd.GeoDataFrame(columns=gdf.columns, crs=gdf.crs)
-            
+
             # Create new GeoDataFrame
-            clipped_gdf = gpd.GeoDataFrame(clipped_data, geometry=clipped_geometries, crs=gdf.crs)
+            clipped_gdf = gpd.GeoDataFrame(
+                clipped_data, geometry=clipped_geometries, crs=gdf.crs
+            )
             logger.info(f"Clipped {len(gdf)} polygons to {len(clipped_gdf)} polygons")
-            
+
             return clipped_gdf
-            
+
         except Exception as e:
             logger.error(f"Error clipping polygons with nodata: {e}")
             logger.info("Returning original GeoDataFrame")
@@ -410,29 +426,29 @@ class SegmentPostprocessingPipeline:
     def _mask_to_polygons(self, mask: np.ndarray, transform: rasterio.Affine) -> List:
         """
         Convert binary mask to list of polygons
-        
+
         Args:
             mask: Boolean mask where True indicates nodata pixels
             transform: Rasterio transform for coordinate conversion
-            
+
         Returns:
             List of Shapely polygons
         """
         try:
             # Convert mask to uint8 for rasterio
             mask_uint8 = mask.astype(np.uint8)
-            
+
             # Extract shapes from mask
             shapes = list(rasterio_shapes(mask_uint8, transform=transform))
-            
+
             polygons = []
             for geom, value in shapes:
                 if value == 1:  # nodata pixels
                     polygons.append(shape(geom))
-            
+
             logger.debug(f"Converted mask to {len(polygons)} nodata polygons")
             return polygons
-            
+
         except Exception as e:
             logger.error(f"Error converting mask to polygons: {e}")
             return []
@@ -492,14 +508,16 @@ class SegmentPostprocessingPipeline:
             tile_output_dir = self.output_dir / tile_name
             geojson_output = tile_output_dir / "segments_processed.geojson"
             if geojson_output.exists():
-                logger.info("  Output already exists, skipping (use --force to overwrite)")
+                logger.info(
+                    "  Output already exists, skipping (use --force to overwrite)"
+                )
                 return {
                     "tile_name": tile_name,
                     "coverage_before": 0.0,
                     "coverage_after": 0.0,
                     "segments_before": 0,
                     "segments_after": 0,
-                    "skipped": True
+                    "skipped": True,
                 }
 
         # Load metadata
@@ -528,7 +546,9 @@ class SegmentPostprocessingPipeline:
         # Load original image if needed for superpixels or nodata detection
         original_image = None
         nodata_mask = None
-        if self.config.get("use_superpixels", False) or self.config.get("close_boundaries", False):
+        if self.config.get("use_superpixels", False) or self.config.get(
+            "close_boundaries", False
+        ):
             original_image = self.load_original_image(tile_name)
             if original_image is not None:
                 # Create nodata mask (pixels where any band = 0)
@@ -634,21 +654,29 @@ class SegmentPostprocessingPipeline:
             # Separate processed and skipped tiles
             processed_results = [r for r in results if not r.get("skipped", False)]
             skipped_results = [r for r in results if r.get("skipped", False)]
-            
+
             summary = {
                 "total_tiles": len(tile_dirs),
                 "processed_tiles": len(processed_results),
                 "skipped_tiles": len(skipped_results),
                 "average_coverage_before": np.mean(
                     [r["coverage_before"] for r in processed_results]
-                ) if processed_results else 0.0,
+                )
+                if processed_results
+                else 0.0,
                 "average_coverage_after": np.mean(
                     [r["coverage_after"] for r in processed_results]
-                ) if processed_results else 0.0,
+                )
+                if processed_results
+                else 0.0,
                 "tiles": results,
             }
         else:
-            summary = {"total_tiles": len(tile_dirs), "processed_tiles": 0, "skipped_tiles": 0}
+            summary = {
+                "total_tiles": len(tile_dirs),
+                "processed_tiles": 0,
+                "skipped_tiles": 0,
+            }
 
         # Save summary
         summary_path = self.output_dir / "processing_summary.json"
@@ -661,8 +689,10 @@ class SegmentPostprocessingPipeline:
         logger.info(
             f"Processed: {summary['processed_tiles']}/{summary['total_tiles']} tiles"
         )
-        if summary.get('skipped_tiles', 0) > 0:
-            logger.info(f"Skipped: {summary['skipped_tiles']} tiles (outputs already exist)")
+        if summary.get("skipped_tiles", 0) > 0:
+            logger.info(
+                f"Skipped: {summary['skipped_tiles']} tiles (outputs already exist)"
+            )
         if processed_results:
             logger.info(
                 f"Avg coverage before: {summary['average_coverage_before']:.1f}%"
@@ -801,7 +831,7 @@ if __name__ == "__main__":
         if args.original_images_dir
         else None,
         config=config,
-        force=args.force
+        force=args.force,
     )
 
     # Process directory
