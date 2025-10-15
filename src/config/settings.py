@@ -44,7 +44,7 @@ class ApplicationConfig:
 
         # ML Training configuration
         self.ML_TRAINING = {
-            "default_models": ["random_forest", "xgboost", "svm"],
+            "default_models": ["random_forest", "xgboost", "svm", "lightgbm"],
             "random_forest": {
                 "n_estimators": 200,
                 "max_depth": 10,
@@ -60,10 +60,18 @@ class ApplicationConfig:
                 "random_state": 42,
             },
             "svm": {"kernel": "rbf", "random_state": 42, "C": 10, "gamma": 0.01},
+            "lightgbm": {
+                "n_estimators": 100,
+                "learning_rate": 0.1,
+                "max_depth": 4,
+                "num_leaves": 31,
+                "min_child_samples": 20,
+                "random_state": 42,
+                "verbose": -1,  # Suppress LightGBM warnings
+            },
             "preprocessing": {
                 "normalize_features": True,
                 "handle_class_imbalance": True,
-                "use_smote": False,  # Can be enabled for more aggressive oversampling
                 "cv_folds": 3,
             },
             "grid_search": {
@@ -90,6 +98,13 @@ class ApplicationConfig:
                     "C": [0.1, 1, 10, 100],
                     "gamma": ["scale", "auto", 0.001, 0.01, 0.1],
                     "kernel": ["rbf", "poly"],
+                },
+                "lightgbm": {
+                    "num_leaves": [31, 63],
+                    "max_depth": [4, 6],
+                    "learning_rate": [0.1, 0.2],
+                    "n_estimators": [100, 200],
+                    "min_child_samples": [20, 30],
                 },
             },
             "feature_selection": {

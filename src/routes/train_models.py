@@ -49,8 +49,8 @@ def main():
     parser.add_argument(
         "--models",
         nargs="+",
-        choices=["random_forest", "xgboost", "svm"],
-        default=["random_forest", "xgboost", "svm"],
+        choices=["random_forest", "xgboost", "svm", "lightgbm"],
+        default=["random_forest", "xgboost", "svm", "lightgbm"],
         help="Models to train (default: all)",
     )
 

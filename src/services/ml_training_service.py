@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 import xgboost as xgb
+import lightgbm as lgb
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import (
     accuracy_score,
@@ -67,6 +68,9 @@ class MLTrainingService:
             test_df: Test DataFrame
             target_column: Name of target column
             feature_columns: List of feature columns (if None, auto-detect)
+            enable_feature_selection: Whether to enable feature selection
+            feature_selection_method: Method for feature selection
+            n_features_to_select: Number of features to select
 
         Returns:
             Tuple of (X_train, X_test, y_train, y_test, preprocessing_info)
@@ -217,7 +221,7 @@ class MLTrainingService:
             Dictionary of trained models
         """
         if models_to_train is None:
-            models_to_train = ["random_forest", "xgboost", "svm"]
+            models_to_train = ["random_forest", "xgboost", "svm", "lightgbm"]
 
         logger.info(f"Training models: {models_to_train}")
         trained_models = {}
@@ -242,6 +246,8 @@ class MLTrainingService:
                         )
                     elif model_name == "svm":
                         model = self._train_svm(X_train, y_train, preprocessing_info)
+                    elif model_name == "lightgbm":
+                        model = self._train_lightgbm(X_train, y_train, preprocessing_info)
                     else:
                         logger.warning(f"Unknown model: {model_name}")
                         continue
@@ -297,6 +303,25 @@ class MLTrainingService:
         model.fit(X_train, y_train)
         return model
 
+    def _train_lightgbm(
+        self,
+        X_train: np.ndarray,
+        y_train: np.ndarray,
+        preprocessing_info: Dict[str, Any],
+    ) -> lgb.LGBMClassifier:
+        """Train LightGBM model"""
+        config = self.config["lightgbm"].copy()
+        # LightGBM uses class_weight differently - convert to 'balanced' or None
+        class_weights = preprocessing_info.get("class_weights", {})
+        if class_weights and any(w > 1.0 for w in class_weights.values()):
+            config["class_weight"] = "balanced"
+        else:
+            config.pop("class_weight", None)
+
+        model = lgb.LGBMClassifier(**config)
+        model.fit(X_train, y_train)
+        return model
+
     def _train_with_grid_search(
         self,
         model_name: str,
@@ -334,6 +359,8 @@ class MLTrainingService:
                 return self._train_xgboost(X_train, y_train, preprocessing_info), {}
             elif model_name == "svm":
                 return self._train_svm(X_train, y_train, preprocessing_info), {}
+            elif model_name == "lightgbm":
+                return self._train_lightgbm(X_train, y_train, preprocessing_info), {}
 
         # Create base model
         if model_name == "random_forest":
@@ -348,6 +375,14 @@ class MLTrainingService:
             base_model = SVC(random_state=42)
             # Add class weights
             param_grid["class_weight"] = [preprocessing_info["class_weights"]]
+        elif model_name == "lightgbm":
+            base_model = lgb.LGBMClassifier(random_state=42)
+            # LightGBM uses class_weight differently - convert to 'balanced' or None
+            class_weights = preprocessing_info.get("class_weights", {})
+            if class_weights and any(w > 1.0 for w in class_weights.values()):
+                param_grid["class_weight"] = ["balanced"]
+            else:
+                param_grid["class_weight"] = [None]
         else:
             raise ValueError(f"Unknown model for grid search: {model_name}")
 
