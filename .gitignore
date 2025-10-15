@@ -173,3 +173,6 @@ desktop.ini
 data/samples
 
 data/
+openspec/
+docs/
+.cursor/
