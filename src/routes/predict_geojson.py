@@ -154,13 +154,13 @@ def main():
                 
                 # Add predictions to features dataframe
                 features_with_predictions = features_df.copy()
-                features_with_predictions[f"{model_name}_predicted_class_num"] = predictions
-                features_with_predictions[f"{model_name}_predicted_class"] = prediction_classes
+                features_with_predictions[f"predicted_class_num"] = predictions
+                features_with_predictions[f"predicted_class"] = prediction_classes
                 
                 # Merge with GeoJSON
                 gdf_with_predictions = pd.merge(
                     gdf, 
-                    features_with_predictions[[args.id_column, f"{model_name}_predicted_class"]], 
+                    features_with_predictions[[args.id_column, f"predicted_class"]], 
                     on=args.id_column, 
                     how="left"
                 )
