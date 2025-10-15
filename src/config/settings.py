@@ -78,10 +78,13 @@ class ApplicationConfig:
                     "min_samples_leaf": [1, 2, 4],
                 },
                 "xgboost": {
-                    "n_estimators": [100, 200, 300],
-                    "learning_rate": [0.1, 0.2, 0.3],
-                    "max_depth": [4, 6, 8],
-                    "colsample_bytree": [0.8, 0.9, 1.0],
+                    "max_depth": [3, 4, 5],
+                    "min_child_weight": [5, 10, 20],
+                    "subsample": [0.6, 0.8],
+                    "colsample_bytree": [0.5, 0.8],
+                    "lambda": [1, 2, 5],
+                    "alpha": [0, 0.1, 0.5],
+                    "eta": [0.05, 0.1]
                 },
                 "svm": {
                     "C": [0.1, 1, 10, 100],

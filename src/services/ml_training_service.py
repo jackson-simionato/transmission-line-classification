@@ -48,24 +48,6 @@ class MLTrainingService:
         self.feature_selector = None
         self.selected_feature_names = None
 
-        # Model configurations
-        self.model_configs = {
-            "random_forest": {
-                "n_estimators": 200,
-                "max_depth": 10,
-                "min_samples_split": 10,
-                "min_samples_leaf": 2,
-                "random_state": 42,
-            },
-            "xgboost": {
-                "n_estimators": 200,
-                "learning_rate": 0.2,
-                "max_depth": 6,
-                "colsample_bytree": 0.8,
-                "random_state": 42,
-            },
-            "svm": {"kernel": "rbf", "random_state": 42},
-        }
 
     def preprocess_data(
         self,
@@ -281,7 +263,7 @@ class MLTrainingService:
         preprocessing_info: Dict[str, Any],
     ) -> RandomForestClassifier:
         """Train Random Forest model"""
-        config = self.model_configs["random_forest"].copy()
+        config = self.config["random_forest"].copy()
         config["class_weight"] = preprocessing_info["class_weights"]
 
         model = RandomForestClassifier(**config)
@@ -295,7 +277,7 @@ class MLTrainingService:
         preprocessing_info: Dict[str, Any],
     ) -> xgb.XGBClassifier:
         """Train XGBoost model"""
-        config = self.model_configs["xgboost"].copy()
+        config = self.config["xgboost"].copy()
 
         model = xgb.XGBClassifier(**config)
         model.fit(X_train, y_train, sample_weight=preprocessing_info["sample_weights"])
@@ -308,7 +290,7 @@ class MLTrainingService:
         preprocessing_info: Dict[str, Any],
     ) -> SVC:
         """Train SVM model"""
-        config = self.model_configs["svm"].copy()
+        config = self.config["svm"].copy()
         config["class_weight"] = preprocessing_info["class_weights"]
 
         model = SVC(**config)
