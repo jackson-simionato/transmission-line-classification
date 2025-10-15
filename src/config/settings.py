@@ -95,9 +95,11 @@ class ApplicationConfig:
                     "eta": [0.05, 0.1]
                 },
                 "svm": {
-                    "C": [0.1, 1, 10, 100],
-                    "gamma": ["scale", "auto", 0.001, 0.01, 0.1],
-                    "kernel": ["rbf", "poly"],
+                    "C": [0.1, 1, 10, 100, 1000],  # Wider range
+                    "gamma": ["scale", "auto", 0.001, 0.01, 0.1, 1, 10],  # More gamma values
+                    "kernel": ["rbf", "poly", "sigmoid"],  # Test other kernels
+                    "degree": [2, 3, 4, 5],  # For poly kernel
+                    "coef0": [0.0, 0.1, 0.5, 1.0]  # For poly/sigmoid kernels
                 },
                 "lightgbm": {
                     "num_leaves": [31, 63],
