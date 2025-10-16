@@ -4,7 +4,7 @@ Automated classification of transmission line infrastructure from orthophoto ima
 
 ## Overview
 
-This project addresses the challenge of automatically identifying and classifying different land cover types around transmission lines from aerial imagery. The system segments orthophoto tiles into polygons, extracts comprehensive features, and classifies them into 5 categories:
+This project addresses the challenge of automatically identifying and classifying different land cover types around transmission lines from high-resolution aerial imagery. The system processes 13 orthophoto tiles at 6 cm resolution, segments them into polygons using computer vision, extracts comprehensive features, and classifies them into 5 classes:
 
 - **Line** (0): Transmission line infrastructure
 - **Tower** (1): Transmission line support structures  
@@ -188,14 +188,42 @@ python -m src.routes.validate_models \
 - Overall segmentation quality improved significantly
 - Some segments still contain mixed classes in the final results
 
-### Feature Engineering
-#### Feature Extraction
+### Feature Extraction
 
-- Feature extraction generated a comprehensive set of per-segment statistics for all labeled points, including spectral means from RGB channels, shape metrics (e.g., area, perimeter, compactness), and texture descriptors.
-- Most geometric features effectively separated towers and linear infrastructure from background segments.
-- Color-based features alone were insufficient for discriminating grassland classes, likely due to overlapping spectral profiles.
-- The extraction process was robust against most label noise, but small or highly irregular segments produced less reliable features.
-- Pseudo-NDVI and other spectral indices provided additional separability for some classes, though the benefit was limited since only RGB bands were available.
-- Overall, the engineered features enabled downstream models to learn class distinctions, but performance for vegetation types heavily depended on the quality and diversity of the sampling.
+- **Spectral Features**: RGB channel statistics (mean, std, min, max), vegetation indices (pseudo-NDVI), and color space transformations
+- **Spatial Features**: Geometric descriptors including compactness, aspect ratio, and shape complexity metrics
+- **Textural Features**: GLCM (Gray-Level Co-occurrence Matrix) features
+- **CNN Embeddings**: MobileNet V3 deep learning features for high-level visual representations (optional)
+- Feature extraction generated 1,057 features per segment, providing comprehensive characterization of each polygon
+- The extraction process was robust, but the high number of features and small sample size meant feature selection was needed before classification.
+
+### Model Training
+
+- **Implemented Models**: Random Forest, XGBoost, SVM, and LightGBM were used as classifiers.
+- **Hyperparameter Tuning**: Conducted via grid search with 3-fold cross-validation, optimizing for the weighted F1 score.
+- **Feature Selection**:
+    - Models performed best with 30–50 selected features from the original 1,057.
+    - Chosen features encompassed a diverse set: spectral, spatial, textural, and CNN embedding-based characteristics.
+- **Class Imbalance Handling**: Used automatic class weight adjustments to address imbalanced class distribution.
+- **Validation Approach**: Used stratified k-fold cross-validation for reliable performance assessment.
+- **Model Evaluation**: Compared models directly based on metrics including accuracy, precision, recall, and F1 score.
+
+### Model Prediction
+
+- **GeoJSON Integration**: Direct prediction on geospatial polygon data with preserved coordinate reference systems
+- **Batch Processing**: Efficient prediction across multiple tiles and large datasets
+- **GIS Export**: Native GeoJSON output compatible with QGIS, ArcGIS, and other GIS platforms
+- **Multi-Model Support**: Prediction using any trained model (Random Forest, XGBoost, SVM, LightGBM)
+
+
+#### Model validation
+- **Ground Truth Integration**: Validation against manually labeled point data with spatial matching
+- **Best Overall Model**: SVM (76.4% accuracy, 82.4% F1-macro)
+- **Class-Specific Performance**: 
+  - Line and Tower: Perfect classification (F1 = 1.0) with SVM and XGBoost respectively
+  - Grassland: Best with LightGBM (F1 = 0.83)
+  - Tall Vegetation: Best with LightGBM (F1 = 0.76)
+  - Soil: Best with SVM (F1 = 0.63)
+- **Consistency**: Low variance across models (accuracy std = 1.1%)
 
 ---
