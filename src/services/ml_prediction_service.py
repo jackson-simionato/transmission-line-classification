@@ -115,12 +115,13 @@ class MLPredictionService:
         
         return model
 
-    def preprocess_features(self, features_df: pd.DataFrame) -> np.ndarray:
+    def preprocess_features(self, features_df: pd.DataFrame, skip_feature_selection: bool = False) -> np.ndarray:
         """
         Preprocess features using the same pipeline as training
 
         Args:
             features_df: DataFrame with features
+            skip_feature_selection: If True, skip feature selection even if available
 
         Returns:
             Preprocessed feature array
@@ -137,20 +138,29 @@ class MLPredictionService:
         # Scale the features using the same scaler used during training
         features_scaled = self.scaler.transform(features_clean)
 
-        # Apply feature selection if it was used during training
-        if self.feature_selector is not None:
-            features_scaled = self.feature_selector.transform(features_scaled)
-            logger.info(f"Applied feature selection: {features_scaled.shape[1]} features selected")
+        # Apply feature selection if it was used during training and not skipped
+        if self.feature_selector is not None and not skip_feature_selection:
+            try:
+                features_scaled = self.feature_selector.transform(features_scaled)
+                logger.info(f"Applied feature selection: {features_scaled.shape[1]} features selected")
+            except Exception as e:
+                logger.warning(f"Feature selection failed: {e}. Skipping feature selection.")
+                logger.info(f"Using all {features_scaled.shape[1]} features without selection")
+        elif self.feature_selector is not None and skip_feature_selection:
+            logger.info(f"Skipping feature selection as requested. Using all {features_scaled.shape[1]} features")
+        else:
+            logger.info(f"No feature selector available. Using all {features_scaled.shape[1]} features")
 
         return features_scaled
 
-    def predict(self, features_df: pd.DataFrame, model_name: str) -> Tuple[np.ndarray, np.ndarray]:
+    def predict(self, features_df: pd.DataFrame, model_name: str, skip_feature_selection: bool = False) -> Tuple[np.ndarray, np.ndarray]:
         """
         Make predictions using a specific model
 
         Args:
             features_df: DataFrame with features
             model_name: Name of the model to use
+            skip_feature_selection: If True, skip feature selection even if available
 
         Returns:
             Tuple of (predictions, prediction_probabilities)
@@ -159,7 +169,7 @@ class MLPredictionService:
         model = self.load_model(model_name)
 
         # Preprocess features
-        features_processed = self.preprocess_features(features_df)
+        features_processed = self.preprocess_features(features_df, skip_feature_selection)
 
         # Make predictions
         predictions = model.predict(features_processed)
@@ -174,12 +184,13 @@ class MLPredictionService:
 
         return predictions, prediction_probs
 
-    def predict_all_models(self, features_df: pd.DataFrame) -> Dict[str, Dict[str, Any]]:
+    def predict_all_models(self, features_df: pd.DataFrame, skip_feature_selection: bool = False) -> Dict[str, Dict[str, Any]]:
         """
         Make predictions using all available models
 
         Args:
             features_df: DataFrame with features
+            skip_feature_selection: If True, skip feature selection even if available
 
         Returns:
             Dictionary with predictions for each model
@@ -188,7 +199,7 @@ class MLPredictionService:
 
         for model_name in self.available_models:
             try:
-                predictions, prediction_probs = self.predict(features_df, model_name)
+                predictions, prediction_probs = self.predict(features_df, model_name, skip_feature_selection)
                 
                 # Convert predictions to class names
                 prediction_classes = [self.config.CLASS_NAMES[pred] for pred in predictions]

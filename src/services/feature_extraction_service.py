@@ -92,6 +92,14 @@ class FeatureExtractionService:
             "glcm_energy": 0.0,
             "glcm_correlation": 0.0,
             "glcm_asm": 0.0,
+            "exg_mean": 0.0,
+            "exg_std": 0.0,
+            "grvi_mean": 0.0,
+            "grvi_std": 0.0,
+            "vari_mean": 0.0,
+            "vari_std": 0.0,
+            "greenness_mean": 0.0,
+            "greenness_std": 0.0,
         }
 
     def _initialize_cnn_model(self):
@@ -179,6 +187,9 @@ class FeatureExtractionService:
         hsv_mean = np.mean(masked_hsv, axis=0)
         hsv_std = np.std(masked_hsv, axis=0)
 
+        # Extract vegetation indices
+        vegetation_indices = self.extract_vegetation_indices(image_patch, mask)
+
         return {
             "rgb_mean_r": float(rgb_mean[0]),
             "rgb_mean_g": float(rgb_mean[1]),
@@ -192,6 +203,77 @@ class FeatureExtractionService:
             "hsv_std_h": float(hsv_std[0]),
             "hsv_std_s": float(hsv_std[1]),
             "hsv_std_v": float(hsv_std[2]),
+            **vegetation_indices,
+        }
+
+    def extract_vegetation_indices(
+        self, image_patch: np.ndarray, mask: np.ndarray
+    ) -> Dict[str, float]:
+        """
+        Extract vegetation indices from image patch
+
+        Args:
+            image_patch: RGB image patch (H, W, 3)
+            mask: Binary mask for the polygon (H, W)
+
+        Returns:
+            Dictionary of vegetation indices
+        """
+        # Apply mask to image
+        masked_image = image_patch[mask > 0]
+
+        if len(masked_image) == 0:
+            # Return zeros if no valid pixels
+            return {
+                "exg_mean": 0.0,
+                "exg_std": 0.0,
+                "grvi_mean": 0.0,
+                "grvi_std": 0.0,
+                "vari_mean": 0.0,
+                "vari_std": 0.0,
+                "greenness_mean": 0.0,
+                "greenness_std": 0.0,
+            }
+
+        # Normalize RGB values to 0-1 range
+        r = image_patch[:, :, 0].astype(np.float32) / 255.0
+        g = image_patch[:, :, 1].astype(np.float32) / 255.0
+        b = image_patch[:, :, 2].astype(np.float32) / 255.0
+
+        # Apply mask to normalized channels
+        r_masked = r[mask > 0]
+        g_masked = g[mask > 0]
+        b_masked = b[mask > 0]
+
+        # Calculate vegetation indices
+        # 1. ExG (Excess Green Index)
+        exg = 2 * g_masked - r_masked - b_masked
+
+        # 2. GRVI (Green-Red Vegetation Index)
+        # Avoid division by zero
+        grvi_denominator = g_masked + r_masked
+        grvi = np.where(grvi_denominator > 0, (g_masked - r_masked) / grvi_denominator, 0)
+
+        # 3. VARI (Visible Atmospherically Resistant Index)
+        # Avoid division by zero
+        vari_denominator = g_masked + r_masked - b_masked
+        vari = np.where(vari_denominator > 0, (g_masked - r_masked) / vari_denominator, 0)
+
+        # 4. Greenness
+        # Avoid division by zero
+        total_rgb = r_masked + g_masked + b_masked
+        greenness = np.where(total_rgb > 0, g_masked / total_rgb, 0)
+
+        # Calculate mean and standard deviation for each index
+        return {
+            "exg_mean": float(np.mean(exg)),
+            "exg_std": float(np.std(exg)),
+            "grvi_mean": float(np.mean(grvi)),
+            "grvi_std": float(np.std(grvi)),
+            "vari_mean": float(np.mean(vari)),
+            "vari_std": float(np.std(vari)),
+            "greenness_mean": float(np.mean(greenness)),
+            "greenness_std": float(np.std(greenness)),
         }
 
     def extract_geometric_features(self, polygon: Polygon) -> Dict[str, float]:

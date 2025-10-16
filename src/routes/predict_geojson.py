@@ -69,6 +69,12 @@ def main():
         help="Column name for joining features and GeoJSON (default: id)",
     )
 
+    parser.add_argument(
+        "--skip-feature-selection",
+        action="store_true",
+        help="Skip feature selection even if available (useful when models were trained without feature selection)",
+    )
+
     args = parser.parse_args()
 
     # Validate input files
@@ -147,7 +153,7 @@ def main():
             
             try:
                 # Make predictions
-                predictions, prediction_probs = prediction_service.predict(X, model_name)
+                predictions, prediction_probs = prediction_service.predict(X, model_name, args.skip_feature_selection)
                 
                 # Convert predictions to class names
                 prediction_classes = [config.CLASS_NAMES[pred] for pred in predictions]
