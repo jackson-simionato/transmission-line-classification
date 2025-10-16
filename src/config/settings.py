@@ -80,10 +80,12 @@ class ApplicationConfig:
                 "scoring": "f1_weighted",
                 "n_jobs": -1,
                 "random_forest": {
-                    "n_estimators": [50, 100, 200],
+                    "n_estimators": [100, 300, 600],
                     "max_depth": [5, 10, 15, None],
                     "min_samples_split": [2, 5, 10],
                     "min_samples_leaf": [1, 2, 4],
+                    "max_features": ["sqrt", "log2", None],
+                    "bootstrap": [True, False]
                 },
                 "xgboost": {
                     "max_depth": [3, 4, 5],
